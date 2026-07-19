@@ -35,6 +35,7 @@ class SseEvent {
 /// 兼容：命名事件（event: 行）、注释行（: 开头，如 keepalive /
 /// `: stream closed`）、多行 data、[DONE] 哨兵（作为 data 原样透出，
 /// 由调用方判断）。
+/// 流结束时若最后一帧没有尾部空行，也会 flush 出来。
 Stream<SseEvent> decodeSse(Stream<List<int>> bytes) async* {
   var buffer = '';
   var eventName = 'message';
@@ -42,8 +43,20 @@ Stream<SseEvent> decodeSse(Stream<List<int>> bytes) async* {
 
   SseEvent? dispatch() {
     if (dataLines.isEmpty) return null;
-    final event = SseEvent(eventName, dataLines.join('\n'));
-    return event;
+    return SseEvent(eventName, dataLines.join('\n'));
+  }
+
+  void applyField(String line) {
+    if (line.startsWith(':')) return; // 注释 / keepalive
+    if (line.startsWith('event:')) {
+      eventName = line.substring(6).trim();
+      return;
+    }
+    if (line.startsWith('data:')) {
+      var value = line.substring(5);
+      if (value.startsWith(' ')) value = value.substring(1);
+      dataLines.add(value);
+    }
   }
 
   await for (final chunk in bytes.transform(utf8.decoder)) {
@@ -61,17 +74,15 @@ Stream<SseEvent> decodeSse(Stream<List<int>> bytes) async* {
         dataLines.clear();
         continue;
       }
-      if (line.startsWith(':')) continue; // 注释 / keepalive
-      if (line.startsWith('event:')) {
-        eventName = line.substring(6).trim();
-        continue;
-      }
-      if (line.startsWith('data:')) {
-        var value = line.substring(5);
-        if (value.startsWith(' ')) value = value.substring(1);
-        dataLines.add(value);
-      }
+      applyField(line);
     }
+  }
+
+  // 流末尾可能没有换行/空行分隔符；把残留 buffer 当作最后一行再 dispatch。
+  if (buffer.isNotEmpty) {
+    var line = buffer;
+    if (line.endsWith('\r')) line = line.substring(0, line.length - 1);
+    if (line.isNotEmpty) applyField(line);
   }
   final tail = dispatch();
   if (tail != null) yield tail;
