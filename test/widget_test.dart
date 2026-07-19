@@ -8,6 +8,7 @@ void main() {
     await tester.pumpWidget(const HermesApp());
     await tester.pumpAndSettle();
     expect(find.text('聊天'), findsAtLeastNWidgets(1));
+    expect(find.text('终端'), findsAtLeastNWidgets(1));
     expect(find.text('任务'), findsAtLeastNWidgets(1));
     expect(find.text('定时'), findsAtLeastNWidgets(1));
     expect(find.text('设置'), findsAtLeastNWidgets(1));

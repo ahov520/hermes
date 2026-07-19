@@ -21,6 +21,23 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.1
+  flutter_native_splash: ^2.4.1
 
 flutter:
   uses-material-design: true
+
+# 启动图标（CI 中 dart run flutter_launcher_icons 生成）
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: assets/icon.png
+  adaptive_icon_background: '#FFFFFF'
+  adaptive_icon_foreground: assets/icon.png
+
+# 原生启动屏（CI 中 dart run flutter_native_splash:create 生成）
+flutter_native_splash:
+  color: '#FFFFFF'
+  image: assets/icon.png
+  android: true
+  ios: false

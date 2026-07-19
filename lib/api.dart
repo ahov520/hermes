@@ -111,6 +111,10 @@ class HermesApi {
   Map<String, String> get _headers => <String, String>{
         'Authorization': 'Bearer $apiKey',
         'Accept': 'application/json',
+        // Cloudflare Bot Fight Mode 会按 UA 拦截 API 流量（dart:io 默认 UA
+        // 实测返回 403 / error code 1010），伪装成浏览器 UA 才能穿透隧道。
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36 HermesMobile/1.0',
       };
 
   static String _errorMessage(int status, String body) {

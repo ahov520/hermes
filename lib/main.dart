@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'models.dart';
 import 'notifications.dart';
 import 'pages/chat_page.dart';
 import 'pages/jobs_page.dart';
 import 'pages/runs_page.dart';
 import 'pages/settings_page.dart';
+import 'pages/terminal_page.dart';
 import 'state.dart';
+import 'theme.dart';
 
 void main() {
   runApp(const HermesApp());
@@ -20,6 +23,7 @@ class HermesApp extends StatefulWidget {
 
 class _HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
   final AppState state = AppState();
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -27,37 +31,51 @@ class _HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     state.load();
     NotificationService.instance.init();
+    // 点击通知（审批/完成/失败）直达对应任务详情页
+    NotificationService.onRunNotificationTap = _openRunFromNotification;
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    NotificationService.onRunNotificationTap = null;
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
-    NotificationService.appInForeground = lifecycleState == AppLifecycleState.resumed;
+    NotificationService.appInForeground =
+        lifecycleState == AppLifecycleState.resumed;
+  }
+
+  void _openRunFromNotification(String runId) {
+    final api = state.api;
+    if (api == null) return;
+    _navigatorKey.currentState?.push(MaterialPageRoute<void>(
+      builder: (_) => RunDetailPage(
+        api: api,
+        record: RunRecord(
+          runId: runId,
+          input: '来自通知的任务',
+          createdAt: DateTime.now(),
+          status: 'running',
+        ),
+      ),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF00696B);
-    return MaterialApp(
-      title: 'Hermes',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: seed),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme:
-            ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark),
-      ),
-      home: AnimatedBuilder(
-        animation: state,
-        builder: (context, _) => HomeShell(state: state),
+    return AnimatedBuilder(
+      animation: state,
+      builder: (context, _) => MaterialApp(
+        title: 'Hermes',
+        debugShowCheckedModeBanner: false,
+        navigatorKey: _navigatorKey,
+        themeMode: state.themeMode,
+        theme: buildHermesTheme(state.seedColor, Brightness.light),
+        darkTheme: buildHermesTheme(state.seedColor, Brightness.dark),
+        home: HomeShell(state: state),
       ),
     );
   }
@@ -80,6 +98,7 @@ class _HomeShellState extends State<HomeShell> {
     final state = widget.state;
     final pages = <Widget>[
       ChatPage(state: state),
+      TerminalPage(state: state),
       RunsPage(state: state),
       JobsPage(state: state),
       SettingsPage(state: state),
@@ -91,6 +110,7 @@ class _HomeShellState extends State<HomeShell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: '聊天'),
+          NavigationDestination(icon: Icon(Icons.terminal), label: '终端'),
           NavigationDestination(icon: Icon(Icons.rocket_launch_outlined), label: '任务'),
           NavigationDestination(icon: Icon(Icons.schedule_outlined), label: '定时'),
           NavigationDestination(icon: Icon(Icons.settings_outlined), label: '设置'),

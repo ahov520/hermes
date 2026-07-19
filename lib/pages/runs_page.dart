@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../api.dart';
 import '../models.dart';
 import '../notifications.dart';
 import '../state.dart';
+import '../ui_feedback.dart';
 
 /// 任务页：提交一次性 agent 任务（Run），实时查看事件流，
 /// 处理工具审批（approval），可中断。
@@ -61,16 +63,28 @@ class _RunsPageState extends State<RunsPage> {
       ));
       if (mounted) setState(() {}); // 回来后刷新状态
     } catch (e) {
-      _toast('提交失败: $e');
+      if (mounted) showErrorSnack(context, '提交失败: $e', onRetry: _submit);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _toast(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+  /// 下拉刷新：逐个拉取进行中任务的最新状态。
+  Future<void> _refreshRuns() async {
+    final api = _api;
+    if (api == null) return;
+    for (final run in _runs.where((r) => r.isActive)) {
+      try {
+        final data = await api.getRun(run.runId);
+        if (!mounted) return;
+        final status = data['status']?.toString();
+        if (status != null && status != run.status) {
+          setState(() => run.status = status);
+        }
+      } catch (_) {
+        // 单个任务刷新失败忽略（记录可能已被服务端清理）
+      }
+    }
   }
 
   @override
@@ -143,27 +157,30 @@ class _RunsPageState extends State<RunsPage> {
                                 color: Theme.of(context).hintColor),
                           ),
                         )
-                      : ListView.builder(
-                          itemCount: _runs.length,
-                          itemBuilder: (context, i) {
-                            final run = _runs[i];
-                            return ListTile(
-                              leading: _statusIcon(run.status),
-                              title: Text(run.input,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
-                              subtitle: Text(
-                                  '${run.runId} · ${run.status}'),
-                              onTap: () async {
-                                await Navigator.of(context)
-                                    .push(MaterialPageRoute<void>(
-                                  builder: (_) => RunDetailPage(
-                                      api: api, record: run),
-                                ));
-                                if (mounted) setState(() {});
-                              },
-                            );
-                          },
+                      : RefreshIndicator(
+                          onRefresh: _refreshRuns,
+                          child: ListView.builder(
+                            itemCount: _runs.length,
+                            itemBuilder: (context, i) {
+                              final run = _runs[i];
+                              return ListTile(
+                                leading: _statusIcon(run.status),
+                                title: Text(run.input,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle:
+                                    Text('${run.runId} · ${run.status}'),
+                                onTap: () async {
+                                  await Navigator.of(context)
+                                      .push(MaterialPageRoute<void>(
+                                    builder: (_) => RunDetailPage(
+                                        api: api, record: run),
+                                  ));
+                                  if (mounted) setState(() {});
+                                },
+                              );
+                            },
+                          ),
                         ),
                 ),
               ],
@@ -314,6 +331,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
         if (text.isNotEmpty) _append(_EventItem.reason(text));
         break;
       case 'approval.request':
+        HapticFeedback.vibrate();
         final command = json['command']?.toString() ??
             json['description']?.toString() ??
             '';
@@ -405,8 +423,8 @@ class _RunDetailPageState extends State<RunDetailPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('审批响应失败: $e')));
+      showErrorSnack(context, '审批响应失败: $e',
+          onRetry: () => _respond(approval, choice));
     }
   }
 
@@ -417,8 +435,7 @@ class _RunDetailPageState extends State<RunDetailPage> {
       setState(() => widget.record.status = 'stopping');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('中断失败: $e')));
+      showErrorSnack(context, '中断失败: $e', onRetry: _stop);
     }
   }
 

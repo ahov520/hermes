@@ -141,11 +141,13 @@ class CronJob {
     this.skills,
     this.repeatTimes,
     this.repeatCompleted,
+    this.latestExecution,
   });
 
   factory CronJob.fromJson(Map<String, dynamic> json) {
     final schedule = json['schedule'];
     final repeat = json['repeat'];
+    final latestExecution = json['latest_execution'];
     return CronJob(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
@@ -166,6 +168,9 @@ class CronJob {
           repeat is Map ? (repeat['times'] as num?)?.toInt() : null,
       repeatCompleted:
           repeat is Map ? (repeat['completed'] as num?)?.toInt() : null,
+      latestExecution: latestExecution is Map
+          ? Map<String, dynamic>.from(latestExecution)
+          : null,
     );
   }
 
@@ -184,7 +189,41 @@ class CronJob {
   final int? repeatTimes;
   final int? repeatCompleted;
 
+  /// 最近一次执行记录（latest_execution 原始 JSON，未解析）。
+  final Map<String, dynamic>? latestExecution;
+
   bool get paused => state == 'paused' || !enabled;
+
+  /// 最近一次执行的一行中文摘要；无记录或无任何可用字段时为 null。
+  String? get latestExecutionSummary {
+    final exec = latestExecution;
+    if (exec == null) return null;
+    final parts = <String>[];
+    final status = exec['status']?.toString();
+    if (status != null && status.isNotEmpty) {
+      parts.add(switch (status) {
+        'completed' => '成功',
+        'failed' => '失败',
+        'cancelled' => '已取消',
+        'running' => '运行中',
+        _ => status,
+      });
+    }
+    final startedAt = exec['started_at']?.toString();
+    if (startedAt != null && startedAt.isNotEmpty) {
+      parts.add('开始于 ${formatIso(startedAt)}');
+    }
+    final finishedAt = exec['finished_at']?.toString();
+    if (finishedAt != null && finishedAt.isNotEmpty) {
+      parts.add('结束于 ${formatIso(finishedAt)}');
+    }
+    final error = exec['error']?.toString();
+    if (error != null && error.isNotEmpty) {
+      parts.add('错误: $error');
+    }
+    if (parts.isEmpty) return null;
+    return parts.join(' · ');
+  }
 }
 
 class RunRecord {

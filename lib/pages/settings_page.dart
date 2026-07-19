@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../api.dart';
 import '../state.dart';
+import '../theme.dart';
 
-/// 设置页：连接配置（服务器地址 + API Key）、连通性测试、
-/// 服务器状态 / 模型 / 技能 / 工具集浏览。
+/// 设置页：连接配置（服务器地址 + API Key）、连通性测试、外观设置、
+/// 服务器状态 / 模型 / 技能 / 工具集浏览、关于信息。
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.state});
 
@@ -24,8 +25,13 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _testResult;
   bool _testOk = false;
   Future<_ServerInfo>? _infoFuture;
+  _ServerInfo? _serverInfo; // 最近一次加载成功的服务器信息（关于区显示版本用）
 
   HermesApi? get _api => widget.state.api;
+
+  /// 服务器版本（未加载成功时显示 -）。
+  String get _serverVersion =>
+      _serverInfo?.health?['version']?.toString() ?? '-';
 
   @override
   void dispose() {
@@ -162,7 +168,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _testOk = true;
         _testResult =
             '连接成功 · ${caps['platform'] ?? 'hermes'} · 模型 ${caps['model'] ?? '-'}';
-        _infoFuture = _loadInfo(api);
+        _infoFuture = _refreshInfo(api);
       });
     } catch (e) {
       if (!mounted) return;
@@ -190,6 +196,13 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       info.toolsets = await api.toolsets();
     } catch (_) {}
+    return info;
+  }
+
+  /// 加载服务器信息并缓存结果，供「关于」区显示服务器版本。
+  Future<_ServerInfo> _refreshInfo(HermesApi api) async {
+    final info = await _loadInfo(api);
+    if (mounted) setState(() => _serverInfo = info);
     return info;
   }
 
@@ -310,6 +323,40 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           const SizedBox(height: 24),
+          Text('外观', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SegmentedButton<ThemeMode>(
+            segments: const [
+              ButtonSegment<ThemeMode>(
+                value: ThemeMode.system,
+                icon: Icon(Icons.brightness_auto),
+                label: Text('跟随系统'),
+              ),
+              ButtonSegment<ThemeMode>(
+                value: ThemeMode.light,
+                icon: Icon(Icons.light_mode),
+                label: Text('浅色'),
+              ),
+              ButtonSegment<ThemeMode>(
+                value: ThemeMode.dark,
+                icon: Icon(Icons.dark_mode),
+                label: Text('深色'),
+              ),
+            ],
+            selected: <ThemeMode>{widget.state.themeMode},
+            onSelectionChanged: (modes) =>
+                widget.state.setThemeMode(modes.first),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              for (final color in hermesSeedColors)
+                _seedColorDot(theme, color),
+            ],
+          ),
+          const SizedBox(height: 24),
           Row(
             children: [
               Text('服务器信息', style: theme.textTheme.titleMedium),
@@ -318,7 +365,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: () =>
-                      setState(() => _infoFuture = _loadInfo(_api!)),
+                      setState(() => _infoFuture = _refreshInfo(_api!)),
                 ),
             ],
           ),
@@ -328,7 +375,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 style: TextStyle(color: theme.hintColor))
           else
             FutureBuilder<_ServerInfo>(
-              future: _infoFuture ??= _loadInfo(_api!),
+              future: _infoFuture ??= _refreshInfo(_api!),
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) {
                   return const Padding(
@@ -342,7 +389,49 @@ class _SettingsPageState extends State<SettingsPage> {
                 return _buildInfo(snapshot.data!);
               },
             ),
+          const SizedBox(height: 24),
+          Text('关于', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              children: [
+                const ListTile(
+                  leading: Icon(Icons.smart_toy_outlined),
+                  title: Text('Hermes Mobile'),
+                  subtitle: Text('版本 0.1.0'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.dns_outlined),
+                  title: const Text('服务器版本'),
+                  subtitle: Text(_serverVersion),
+                ),
+              ],
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  /// 主题色选择圆点：选中的加粗边框并显示对勾。
+  Widget _seedColorDot(ThemeData theme, Color color) {
+    final selected = widget.state.seedColor.value == color.value;
+    return GestureDetector(
+      onTap: () => widget.state.setSeedColor(color),
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: selected
+              ? Border.all(color: theme.colorScheme.outline, width: 3)
+              : null,
+        ),
+        child: selected
+            ? const Icon(Icons.check, color: Colors.white, size: 20)
+            : null,
       ),
     );
   }

@@ -46,6 +46,16 @@ ingress:
 App 设置页新建一套配置：`https://<你的API域名>` + 同一个 API Key，
 与局域网配置一键切换。隧道自带 TLS，密钥鉴权不变。
 
+#### 隧道注意事项
+
+1. Cloudflare Bot Fight Mode 会按 UA 拦截 API 流量（dart:io 默认 UA 实测返回
+   403 / error code 1010）。App 已内置浏览器 UA，可直接穿透，无需额外配置。
+2. 根治建议：Cloudflare 控制台 → 域名 → Security → WAF → Custom rules →
+   新建规则 `http.host eq "api.ahov12.cc.cd"` → Action 选 **Skip** 并勾选跳过
+   所有安全特性。配好 WAF 规则后 UA 伪装就不再是必须的。
+3. 隧道上传大 body（>约 4MB）会被断开。App 已把发送的图片压缩到
+   1280px / 70 质量，正常拍照发送不会触到该上限。
+
 ## GitHub Actions 编译
 
 仓库内置 `.github/workflows/build.yml`：

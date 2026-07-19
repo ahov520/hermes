@@ -21,12 +21,21 @@ class NotificationService {
   /// App 是否处于前台（由 main.dart 的生命周期观察者维护）。前台时不打扰。
   static bool appInForeground = true;
 
+  /// 点击任务通知时的回调（payload 为 runId），由 main.dart 设置用于页面跳转。
+  static void Function(String runId)? onRunNotificationTap;
+
   Future<void> init() async {
     try {
       const settings = InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       );
-      await _plugin.initialize(settings);
+      await _plugin.initialize(
+        settings,
+        onDidReceiveNotificationResponse: (resp) {
+          final p = resp.payload;
+          if (p != null && p.isNotEmpty) onRunNotificationTap?.call(p);
+        },
+      );
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
       await android?.requestNotificationsPermission();
@@ -46,7 +55,7 @@ class NotificationService {
     }
   }
 
-  Future<void> _notify(String title, String body) async {
+  Future<void> _notify(String title, String body, {String? payload}) async {
     if (!_ready) return;
     // 前台可见时不推系统通知，页面内已有展示
     if (appInForeground) return;
@@ -65,18 +74,20 @@ class NotificationService {
             priority: Priority.high,
           ),
         ),
+        payload: payload,
       );
     } catch (e) {
       debugPrint('通知发送失败（忽略）: $e');
     }
   }
 
-  Future<void> runNeedsApproval(String runId, String command) =>
-      _notify('Hermes 任务等待审批', command.isEmpty ? '有一个工具调用需要确认' : command);
+  Future<void> runNeedsApproval(String runId, String command) => _notify(
+      'Hermes 任务等待审批', command.isEmpty ? '有一个工具调用需要确认' : command,
+      payload: runId);
 
   Future<void> runCompleted(String runId, String input) =>
-      _notify('Hermes 任务完成', input);
+      _notify('Hermes 任务完成', input, payload: runId);
 
   Future<void> runFailed(String runId, String error) =>
-      _notify('Hermes 任务失败', error.isEmpty ? '未知错误' : error);
+      _notify('Hermes 任务失败', error.isEmpty ? '未知错误' : error, payload: runId);
 }

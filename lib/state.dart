@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
@@ -37,6 +37,8 @@ class AppState extends ChangeNotifier {
   static const String _kApiKey = 'hermes_api_key'; // 旧版单配置 key（迁移用）
   static const String _kProfiles = 'hermes_profiles';
   static const String _kActiveProfile = 'hermes_active_profile';
+  static const String _kThemeMode = 'hermes_theme_mode';
+  static const String _kSeedColor = 'hermes_seed_color';
 
   /// 新装默认指向部署时探测到的局域网地址，用户可在设置页修改。
   static const String defaultBaseUrl = 'http://192.168.2.159:8642';
@@ -49,7 +51,19 @@ class AppState extends ChangeNotifier {
 
   HermesApi? _api;
 
+  /// 默认主题种子色（teal），与 theme.dart 中 hermesSeedColors 首个一致。
+  static const int defaultSeedColorValue = 0xFF00696B;
+
+  ThemeMode _themeMode = ThemeMode.system;
+  int _seedColorValue = defaultSeedColorValue;
+
   HermesApi? get api => _api;
+
+  /// 当前主题模式（跟随系统 / 浅色 / 深色）。
+  ThemeMode get themeMode => _themeMode;
+
+  /// 当前主题种子色。
+  Color get seedColor => Color(_seedColorValue);
 
   bool get configured => _api != null;
 
@@ -83,6 +97,13 @@ class AppState extends ChangeNotifier {
         profiles[0].apiKey = oldKey ?? '';
       }
     }
+    // 外观设置
+    final modeName = prefs.getString(_kThemeMode);
+    _themeMode = ThemeMode.values.firstWhere(
+      (m) => m.name == modeName,
+      orElse: () => ThemeMode.system,
+    );
+    _seedColorValue = prefs.getInt(_kSeedColor) ?? defaultSeedColorValue;
     _rebuildApi();
     loaded = true;
     notifyListeners();
@@ -138,6 +159,24 @@ class AppState extends ChangeNotifier {
     activeIndex = index;
     await _persist();
     _rebuildApi();
+    notifyListeners();
+  }
+
+  /// 设置主题模式并持久化。
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (mode == _themeMode) return;
+    _themeMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kThemeMode, mode.name);
+    notifyListeners();
+  }
+
+  /// 设置主题种子色并持久化。
+  Future<void> setSeedColor(Color color) async {
+    if (color.value == _seedColorValue) return;
+    _seedColorValue = color.value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kSeedColor, _seedColorValue);
     notifyListeners();
   }
 

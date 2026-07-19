@@ -6,6 +6,7 @@ import '../api.dart';
 import '../models.dart';
 import '../schedule_text.dart';
 import '../state.dart';
+import '../ui_feedback.dart';
 
 /// 定时任务页：cron 任务的查看、新建、编辑、暂停/恢复、立即运行、删除。
 class JobsPage extends StatefulWidget {
@@ -54,7 +55,7 @@ class _JobsPageState extends State<JobsPage> {
             .toList();
       });
     } catch (e) {
-      _toast('加载任务失败: $e');
+      if (mounted) showErrorSnack(context, '加载任务失败: $e', onRetry: _load);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -74,7 +75,7 @@ class _JobsPageState extends State<JobsPage> {
       _toast('$label 成功');
       await _load();
     } catch (e) {
-      _toast('$label 失败: $e');
+      if (mounted) showErrorSnack(context, '$label 失败: $e');
     }
   }
 
@@ -105,7 +106,7 @@ class _JobsPageState extends State<JobsPage> {
       await api.deleteJob(job.id);
       await _load();
     } catch (e) {
-      _toast('删除失败: $e');
+      if (mounted) showErrorSnack(context, '删除失败: $e');
     }
   }
 
@@ -242,7 +243,7 @@ class _JobsPageState extends State<JobsPage> {
       }
       await _load();
     } catch (e) {
-      _toast('保存失败: $e');
+      if (mounted) showErrorSnack(context, '保存失败: $e');
     }
   }
 
@@ -333,6 +334,11 @@ class _JobsPageState extends State<JobsPage> {
               Text('错误: ${job.lastError}',
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.error),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+            if (job.latestExecutionSummary != null)
+              Text('最近执行: ${job.latestExecutionSummary}',
+                  style: theme.textTheme.bodySmall,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis),
             if (job.prompt != null && job.prompt!.isNotEmpty)

@@ -76,6 +76,12 @@ jobs:
       - name: flutter pub get
         run: flutter pub get
 
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
+
+      - name: Generate native splash
+        run: dart run flutter_native_splash:create
+
       - name: Analyze (errors only)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
