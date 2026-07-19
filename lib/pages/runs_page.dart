@@ -5,6 +5,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../api.dart';
 import '../models.dart';
+import '../notifications.dart';
 import '../state.dart';
 
 /// 任务页：提交一次性 agent 任务（Run），实时查看事件流，
@@ -313,12 +314,15 @@ class _RunDetailPageState extends State<RunDetailPage> {
         if (text.isNotEmpty) _append(_EventItem.reason(text));
         break;
       case 'approval.request':
+        final command = json['command']?.toString() ??
+            json['description']?.toString() ??
+            '';
+        NotificationService.instance
+            .runNeedsApproval(widget.record.runId, command);
         setState(() {
           widget.record.status = 'waiting_for_approval';
           _approvals.add(_Approval(
-            command: json['command']?.toString() ??
-                json['description']?.toString() ??
-                '',
+            command: command,
             description: json['description']?.toString() ?? '',
             choices: (json['choices'] as List? ??
                     <dynamic>['once', 'session', 'always', 'deny'])
@@ -338,6 +342,8 @@ class _RunDetailPageState extends State<RunDetailPage> {
         break;
       case 'run.completed':
         widget.record.status = 'completed';
+        NotificationService.instance
+            .runCompleted(widget.record.runId, widget.record.input);
         final output = json['output']?.toString() ?? '';
         if (output.isNotEmpty) {
           if (_textItem != null) {
@@ -352,6 +358,8 @@ class _RunDetailPageState extends State<RunDetailPage> {
         break;
       case 'run.failed':
         widget.record.status = 'failed';
+        NotificationService.instance
+            .runFailed(widget.record.runId, json['error']?.toString() ?? '');
         _addNotice('任务失败: ${json['error'] ?? '未知错误'}');
         break;
       case 'run.cancelled':

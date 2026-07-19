@@ -282,9 +282,12 @@ class HermesApi {
   /// 会话内流式对话。事件名：run.started / message.started /
   /// assistant.delta / tool.progress / tool.started / tool.completed /
   /// tool.failed / assistant.completed / run.completed / error / done。
+  ///
+  /// [message] 可以是纯文本 String，也可以是多模态 parts 数组
+  /// （如 `[{"type":"image_url","image_url":{"url":"data:..."}},{"type":"text","text":"..."}]`）。
   Stream<SseEvent> chatStream(
     String sessionId,
-    String message, {
+    Object message, {
     void Function(Map<String, String> headers)? onHeaders,
   }) =>
       postSse('/api/sessions/${Uri.encodeComponent(sessionId)}/chat/stream',
@@ -341,12 +344,16 @@ class HermesApi {
     required String schedule,
     required String prompt,
     String? deliver,
+    List<String>? skills,
+    int? repeat,
   }) =>
       _send('POST', '/api/jobs', body: <String, dynamic>{
         'name': name,
         'schedule': schedule,
         'prompt': prompt,
         if (deliver != null && deliver.isNotEmpty) 'deliver': deliver,
+        if (skills != null && skills.isNotEmpty) 'skills': skills,
+        if (repeat != null && repeat > 0) 'repeat': repeat,
       });
 
   Future<Map<String, dynamic>> updateJob(

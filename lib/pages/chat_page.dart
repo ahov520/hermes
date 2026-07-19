@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../api.dart';
 import '../models.dart';
@@ -18,13 +21,14 @@ class ChatPage extends StatefulWidget {
 }
 
 class _Msg {
-  _Msg.user(this.text) : role = 'user';
+  _Msg.user(this.text, {this.imageBytes}) : role = 'user';
   _Msg.assistant() : role = 'assistant';
   _Msg.tool(this.toolName, this.text) : role = 'tool';
   _Msg.thinking() : role = 'thinking';
 
   final String role;
   String? text;
+  Uint8List? imageBytes;
   final StringBuffer buffer = StringBuffer();
   String? toolName;
   String status = 'done'; // tool: running | done | failed
@@ -44,6 +48,8 @@ class _ChatPageState extends State<ChatPage> {
   bool _sending = false;
   bool _loadingSessions = false;
   bool _loadingMessages = false;
+  Uint8List? _pendingImage;
+  String _pendingImageMime = 'image/jpeg';
 
   HermesApi? get _api => widget.state.api;
 
@@ -129,7 +135,8 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   Future<HermesSession?> _ensureSession(String firstMessage) async {
-    if (_current != null) return _current;
+    final current = _current;
+    if (current != null && current.endReason == null) return current;
     final api = _api;
     if (api == null) return null;
     final title =
@@ -152,25 +159,41 @@ class _ChatPageState extends State<ChatPage> {
   Future<void> _send() async {
     final api = _api;
     final text = _input.text.trim();
-    if (api == null || text.isEmpty || _sending) return;
+    final image = _pendingImage;
+    final imageMime = _pendingImageMime;
+    if (api == null || (text.isEmpty && image == null) || _sending) return;
     _input.clear();
     setState(() {
       _sending = true;
-      _items.add(_Msg.user(text));
+      _pendingImage = null;
+      _items.add(_Msg.user(text, imageBytes: image));
     });
     _jumpToBottom();
 
     _Msg? assistant;
     try {
-      final session = await _ensureSession(text);
+      final session = await _ensureSession(text.isEmpty ? '图片消息' : text);
       if (session == null) throw ApiException(-1, '无可用会话');
       assistant = _Msg.assistant()..streaming = true;
       setState(() => _items.add(assistant!));
       _jumpToBottom();
 
+      final Object payload = image == null
+          ? text
+          : <Map<String, dynamic>>[
+              <String, dynamic>{
+                'type': 'image_url',
+                'image_url': <String, dynamic>{
+                  'url': 'data:$imageMime;base64,${base64Encode(image)}',
+                },
+              },
+              if (text.isNotEmpty)
+                <String, dynamic>{'type': 'text', 'text': text},
+            ];
+
       final stream = api.chatStream(
         session.id,
-        text,
+        payload,
         onHeaders: (headers) {
           // 压缩轮换后服务端会返回新的会话 id，跟随它
           final newId = headers['x-hermes-session-id'];
@@ -298,6 +321,60 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   // ------------------------------------------------------------------
+  // 图片选择
+  // ------------------------------------------------------------------
+
+  Future<void> _pickImage() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('拍照'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('从相册选择'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        imageQuality: 80,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _pendingImage = bytes;
+        _pendingImageMime = _mimeFromName(picked.name);
+      });
+    } catch (e) {
+      _toast('选取图片失败: $e');
+    }
+  }
+
+  static String _mimeFromName(String name) {
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+    return switch (ext) {
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      'heic' || 'heif' => 'image/heic',
+      _ => 'image/jpeg',
+    };
+  }
+
+  // ------------------------------------------------------------------
   // 会话操作
   // ------------------------------------------------------------------
 
@@ -365,6 +442,29 @@ class _ChatPageState extends State<ChatPage> {
       }
     } catch (e) {
       _toast('分叉失败: $e');
+    }
+  }
+
+  Future<void> _endSession() async {
+    final api = _api;
+    final session = _current;
+    if (api == null || session == null) return;
+    try {
+      await api.patchSession(session.id, endReason: 'ended');
+      _toast('会话已结束，下次发消息将开启新会话');
+      await _refreshSessions();
+      if (mounted) {
+        setState(() => _current = _sessions.firstWhere(
+              (s) => s.id == session.id,
+              orElse: () => HermesSession(
+                id: session.id,
+                title: session.title,
+                endReason: 'ended',
+              ),
+            ));
+      }
+    } catch (e) {
+      _toast('结束会话失败: $e');
     }
   }
 
@@ -442,6 +542,8 @@ class _ChatPageState extends State<ChatPage> {
                     _renameSession();
                   case 'fork':
                     _forkSession();
+                  case 'end':
+                    _endSession();
                   case 'delete':
                     _deleteSession();
                 }
@@ -449,6 +551,7 @@ class _ChatPageState extends State<ChatPage> {
               itemBuilder: (context) => const [
                 PopupMenuItem(value: 'rename', child: Text('重命名')),
                 PopupMenuItem(value: 'fork', child: Text('分叉会话')),
+                PopupMenuItem(value: 'end', child: Text('结束会话')),
                 PopupMenuItem(value: 'delete', child: Text('删除会话')),
               ],
             ),
@@ -493,7 +596,8 @@ class _ChatPageState extends State<ChatPage> {
                           title: Text(s.displayTitle,
                               maxLines: 1, overflow: TextOverflow.ellipsis),
                           subtitle: Text(
-                            '${formatUnixTs(s.lastActive ?? s.startedAt)} · ${s.messageCount} 条',
+                            '${formatUnixTs(s.lastActive ?? s.startedAt)} · ${s.messageCount} 条'
+                            '${s.endReason != null ? ' · 已结束' : ''}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -541,7 +645,26 @@ class _ChatPageState extends State<ChatPage> {
               color: theme.colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: SelectableText(msg.text ?? ''),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (msg.imageBytes != null)
+                  Padding(
+                    padding: EdgeInsets.only(
+                        bottom: (msg.text ?? '').isEmpty ? 0 : 6),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(
+                        msg.imageBytes!,
+                        height: 180,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                if ((msg.text ?? '').isNotEmpty) SelectableText(msg.text!),
+              ],
+            ),
           ),
         );
       case 'tool':
@@ -638,27 +761,62 @@ class _ChatPageState extends State<ChatPage> {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _input,
-                minLines: 1,
-                maxLines: 5,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _send(),
-                decoration: const InputDecoration(
-                  hintText: '给 Hermes 发消息…',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+            if (_pendingImage != null)
+              Container(
+                alignment: Alignment.centerLeft,
+                margin: const EdgeInsets.only(bottom: 6),
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(
+                        _pendingImage!,
+                        height: 72,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: GestureDetector(
+                        onTap: () => setState(() => _pendingImage = null),
+                        child: const Icon(Icons.cancel, size: 20),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            IconButton.filled(
-              icon: const Icon(Icons.send),
-              onPressed: _sending ? null : _send,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  tooltip: '发送图片',
+                  onPressed: _sending ? null : _pickImage,
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _input,
+                    minLines: 1,
+                    maxLines: 5,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    decoration: const InputDecoration(
+                      hintText: '给 Hermes 发消息…',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  icon: const Icon(Icons.send),
+                  onPressed: _sending ? null : _send,
+                ),
+              ],
             ),
           ],
         ),

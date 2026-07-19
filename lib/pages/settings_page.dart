@@ -45,6 +45,101 @@ class _SettingsPageState extends State<SettingsPage> {
         .showSnackBar(const SnackBar(content: Text('已保存')));
   }
 
+  void _syncControllers() {
+    _url.text = widget.state.baseUrl;
+    _key.text = widget.state.apiKey;
+  }
+
+  Future<void> _addProfileDialog() async {
+    final name = TextEditingController();
+    final url = TextEditingController(text: _url.text);
+    final key = TextEditingController(text: _key.text);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('新建连接配置'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(
+                labelText: '配置名称',
+                hintText: '如：家里 Wi-Fi / 隧道远程',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: url,
+              decoration: const InputDecoration(labelText: '服务器地址'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: key,
+              decoration: const InputDecoration(labelText: 'API Key'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.state.addProfile(
+      name: name.text,
+      baseUrl: url.text,
+      apiKey: key.text,
+    );
+    if (!mounted) return;
+    setState(() {
+      _syncControllers();
+      _testResult = null;
+      _infoFuture = null;
+    });
+  }
+
+  Future<void> _deleteActiveProfile() async {
+    final state = widget.state;
+    if (state.profiles.length <= 1) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('至少保留一套配置')));
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除配置'),
+        content: Text('确定删除「${state.activeProfile.name}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await state.deleteProfile(state.activeIndex);
+    if (!mounted) return;
+    setState(() {
+      _syncControllers();
+      _testResult = null;
+      _infoFuture = null;
+    });
+  }
+
   Future<void> _test() async {
     await _save();
     final api = _api;
@@ -108,6 +203,47 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           Text('连接', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButton<int>(
+                  value: widget.state.activeIndex,
+                  isExpanded: true,
+                  items: [
+                    for (var i = 0; i < widget.state.profiles.length; i++)
+                      DropdownMenuItem<int>(
+                        value: i,
+                        child: Text(
+                          widget.state.profiles[i].name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (i) async {
+                    if (i == null) return;
+                    await widget.state.selectProfile(i);
+                    if (!mounted) return;
+                    setState(() {
+                      _syncControllers();
+                      _testResult = null;
+                      _infoFuture = null;
+                    });
+                  },
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.add),
+                tooltip: '新建配置',
+                onPressed: _addProfileDialog,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: '删除当前配置',
+                onPressed: _deleteActiveProfile,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _url,
             keyboardType: TextInputType.url,

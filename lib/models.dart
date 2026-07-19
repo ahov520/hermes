@@ -138,10 +138,14 @@ class CronJob {
     this.lastStatus,
     this.lastError,
     this.deliver,
+    this.skills,
+    this.repeatTimes,
+    this.repeatCompleted,
   });
 
   factory CronJob.fromJson(Map<String, dynamic> json) {
     final schedule = json['schedule'];
+    final repeat = json['repeat'];
     return CronJob(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
@@ -155,6 +159,13 @@ class CronJob {
       lastStatus: json['last_status']?.toString(),
       lastError: json['last_error']?.toString(),
       deliver: json['deliver']?.toString(),
+      skills: (json['skills'] as List?)
+          ?.map((e) => e.toString())
+          .toList(growable: false),
+      repeatTimes:
+          repeat is Map ? (repeat['times'] as num?)?.toInt() : null,
+      repeatCompleted:
+          repeat is Map ? (repeat['completed'] as num?)?.toInt() : null,
     );
   }
 
@@ -169,6 +180,9 @@ class CronJob {
   final String? lastStatus;
   final String? lastError;
   final String? deliver;
+  final List<String>? skills;
+  final int? repeatTimes;
+  final int? repeatCompleted;
 
   bool get paused => state == 'paused' || !enabled;
 }

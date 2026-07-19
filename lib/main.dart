@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'notifications.dart';
 import 'pages/chat_page.dart';
 import 'pages/jobs_page.dart';
 import 'pages/runs_page.dart';
@@ -17,13 +18,26 @@ class HermesApp extends StatefulWidget {
   State<HermesApp> createState() => _HermesAppState();
 }
 
-class _HermesAppState extends State<HermesApp> {
+class _HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
   final AppState state = AppState();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     state.load();
+    NotificationService.instance.init();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    NotificationService.appInForeground = lifecycleState == AppLifecycleState.resumed;
   }
 
   @override
