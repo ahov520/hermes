@@ -3,8 +3,9 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 /// 本地通知服务：任务等待审批 / 完成 / 失败时推送系统通知。
 ///
-/// 仅使用即时通知（show），不涉及定时通知，因此 Android 侧
-/// 不需要 core library desugaring。测试环境下插件不可用时会静默降级。
+/// 仅使用即时通知（show）。依赖 flutter_local_notifications 17+，
+/// Android 侧需在 app Gradle 启用 core library desugaring（见 CI build.yml）。
+/// 测试环境下插件不可用时会静默降级。
 class NotificationService {
   NotificationService._();
 

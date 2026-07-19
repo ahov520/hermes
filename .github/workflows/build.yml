@@ -43,6 +43,62 @@ jobs:
           grep -q 'android.permission.POST_NOTIFICATIONS' "$MANIFEST"
           grep -q 'usesCleartextTraffic' "$MANIFEST"
 
+      # flutter_local_notifications 17+ 需要 core library desugaring。
+      # flutter create 生成的 Kotlin DSL 模板默认没有这些配置，在此注入。
+      - name: Patch Android Gradle (desugaring for notifications)
+        run: |
+          APP_GRADLE=android/app/build.gradle.kts
+          test -f "$APP_GRADLE"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/build.gradle.kts")
+          text = p.read_text(encoding="utf-8")
+          if "isCoreLibraryDesugaringEnabled" not in text:
+              old = """    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }"""
+              new = """    compileOptions {
+        isCoreLibraryDesugaringEnabled = true
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }"""
+              if old not in text:
+                  raise SystemExit(f"unexpected compileOptions block in {p}")
+              text = text.replace(old, new, 1)
+          if "multiDexEnabled" not in text:
+              old = """    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId ="""
+              new = """    defaultConfig {
+        multiDexEnabled = true
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId ="""
+              if old not in text:
+                  # looser fallback: inject after defaultConfig {
+                  marker = "    defaultConfig {"
+                  if marker not in text:
+                      raise SystemExit(f"defaultConfig block not found in {p}")
+                  text = text.replace(
+                      marker,
+                      marker + "\n        multiDexEnabled = true",
+                      1,
+                  )
+              else:
+                  text = text.replace(old, new, 1)
+          dep_block = """
+dependencies {
+    coreLibraryDesugaring(\"com.android.tools:desugar_jdk_libs:2.1.4\")
+}
+"""
+          if "desugar_jdk_libs" not in text:
+              text = text.rstrip() + "\n" + dep_block
+          p.write_text(text, encoding="utf-8")
+          print(p.read_text(encoding="utf-8"))
+          PY
+          grep -q 'isCoreLibraryDesugaringEnabled' "$APP_GRADLE"
+          grep -q 'desugar_jdk_libs' "$APP_GRADLE"
+
       - name: flutter pub get
         run: flutter pub get
 
