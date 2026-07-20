@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -699,12 +698,14 @@ class _StudioChatPageState extends State<StudioChatPage> {
 
   bool get _showCommandPanel => _input.text.startsWith('/');
 
-  List<Object> get _matchingCommands {
+  List<_QuickCommand> get _matchingCommands {
     final query = _input.text.substring(1).trim().toLowerCase();
     final slash = _slashCommands.map((c) => _QuickCommand(c, '/$c'));
     final custom = _customCommands;
-    if (query.isEmpty) return <Object>[...slash, ...custom];
-    return <Object>[...slash, ...custom]
+    if (query.isEmpty) {
+      return <_QuickCommand>[...slash, ...custom];
+    }
+    return <_QuickCommand>[...slash, ...custom]
         .where((c) => c.name.toLowerCase().contains(query))
         .toList(growable: false);
   }
@@ -1874,19 +1875,18 @@ class _StudioChatPageState extends State<StudioChatPage> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         children: [
           for (final cmd in commands)
-            if (cmd is _QuickCommand)
-              ListTile(
-                dense: true,
-                title: Text(cmd.isSlash ? cmd.template : '/${cmd.name}'),
-                subtitle: cmd.isSlash
-                    ? null
-                    : Text(cmd.template,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                onTap: () => _applyCommand(cmd),
-                onLongPress: !cmd.isSlash && _customCommands.contains(cmd)
-                    ? () => _deleteCommand(cmd)
-                    : null,
-              ),
+            ListTile(
+              dense: true,
+              title: Text(cmd.isSlash ? cmd.template : '/${cmd.name}'),
+              subtitle: cmd.isSlash
+                  ? null
+                  : Text(cmd.template,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => _applyCommand(cmd),
+              onLongPress: !cmd.isSlash && _customCommands.contains(cmd)
+                  ? () => _deleteCommand(cmd)
+                  : null,
+            ),
           ListTile(
             dense: true,
             leading: const Icon(Icons.add, size: 18),
