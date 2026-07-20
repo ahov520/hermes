@@ -16,6 +16,8 @@ dependencies:
   # 16.3.x 在新版 Android SDK 上 bigLargeIcon(null) 编译失败；17.2.1+ 已修复。
   # 17+ 需要 android 侧 core library desugaring（CI 在 build.yml 里注入）。
   flutter_local_notifications: ^17.2.4
+  # Hermes Studio 聊天流式走 Socket.IO（非 SSE）
+  socket_io_client: ^3.0.0
 
 dev_dependencies:
   flutter_test:
