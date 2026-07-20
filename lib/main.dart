@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'notifications.dart';
-import 'pages/chat_page.dart';
 import 'pages/jobs_page.dart';
 import 'pages/runs_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/terminal_page.dart';
 import 'state.dart';
+import 'studio/chat_page.dart';
 import 'theme.dart';
 
 void main() {
@@ -97,7 +97,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final state = widget.state;
     final pages = <Widget>[
-      ChatPage(state: state),
+      StudioChatPage(state: state),
       TerminalPage(state: state),
       RunsPage(state: state),
       JobsPage(state: state),

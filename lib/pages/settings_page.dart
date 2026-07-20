@@ -27,6 +27,15 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<_ServerInfo>? _infoFuture;
   _ServerInfo? _serverInfo; // 最近一次加载成功的服务器信息（关于区显示版本用）
 
+  // Studio（8648）配置
+  late final TextEditingController _studioUrl = TextEditingController(
+      text: widget.state.activeStudioAccount.baseUrl);
+  late final TextEditingController _studioUser = TextEditingController(
+      text: widget.state.activeStudioAccount.username);
+  late final TextEditingController _studioPass = TextEditingController(
+      text: widget.state.activeStudioAccount.password);
+  bool _studioBusy = false;
+
   HermesApi? get _api => widget.state.api;
 
   /// 服务器版本（未加载成功时显示 -）。
@@ -37,6 +46,9 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _url.dispose();
     _key.dispose();
+    _studioUrl.dispose();
+    _studioUser.dispose();
+    _studioPass.dispose();
     super.dispose();
   }
 
@@ -206,6 +218,286 @@ class _SettingsPageState extends State<SettingsPage> {
     return info;
   }
 
+  // ------------------------------------------------------------------
+  // Studio（8648）配置区
+  // ------------------------------------------------------------------
+
+  void _syncStudioControllers() {
+    final account = widget.state.activeStudioAccount;
+    _studioUrl.text = account.baseUrl;
+    _studioUser.text = account.username;
+    _studioPass.text = account.password;
+  }
+
+  Future<void> _studioSave() async {
+    await widget.state.saveStudioAccount(
+      baseUrl: _studioUrl.text,
+      username: _studioUser.text,
+      password: _studioPass.text,
+    );
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('已保存')));
+  }
+
+  Future<void> _studioLogin() async {
+    await widget.state.saveStudioAccount(
+      baseUrl: _studioUrl.text,
+      username: _studioUser.text,
+      password: _studioPass.text,
+    );
+    if (!mounted) return;
+    setState(() => _studioBusy = true);
+    try {
+      final me = await widget.state.loginStudio(
+        username: _studioUser.text.trim(),
+        password: _studioPass.text,
+      );
+      if (!mounted) return;
+      final user = me['user'];
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              '已登录: ${user is Map ? (user['username'] ?? '') : ''}')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('登录失败: $e')));
+    } finally {
+      if (mounted) setState(() => _studioBusy = false);
+    }
+  }
+
+  Future<void> _studioLogout() async {
+    await widget.state.logoutStudio();
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('已退出登录')));
+  }
+
+  Future<void> _addStudioAccountDialog() async {
+    final name = TextEditingController();
+    final url = TextEditingController(text: _studioUrl.text);
+    final user = TextEditingController(text: _studioUser.text);
+    final pass = TextEditingController(text: _studioPass.text);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('新建 Studio 配置'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: const InputDecoration(
+                  labelText: '配置名称',
+                  hintText: '如：家里 Wi-Fi / 隧道远程',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: url,
+                decoration: const InputDecoration(
+                  labelText: '服务器地址',
+                  hintText: 'http://192.168.2.159:8648 或 https://ahov12.cc.cd',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: user,
+                decoration: const InputDecoration(labelText: '用户名'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: pass,
+                decoration: const InputDecoration(labelText: '密码'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await widget.state.addStudioAccount(
+      name: name.text,
+      baseUrl: url.text,
+      username: user.text,
+      password: pass.text,
+    );
+    if (!mounted) return;
+    setState(_syncStudioControllers);
+  }
+
+  Future<void> _deleteStudioAccount() async {
+    final state = widget.state;
+    if (state.studioAccounts.length <= 1) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('至少保留一套配置')));
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除配置'),
+        content: Text('确定删除「${state.activeStudioAccount.name}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    await state.deleteStudioAccount(state.studioActiveIndex);
+    if (!mounted) return;
+    setState(_syncStudioControllers);
+  }
+
+  Widget _buildStudioSection(ThemeData theme) {
+    final state = widget.state;
+    final loggedIn = state.studioLoggedIn;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Studio 服务器', style: theme.textTheme.titleMedium),
+            const SizedBox(width: 8),
+            Chip(
+              label: Text(loggedIn ? '已登录' : '未登录'),
+              visualDensity: VisualDensity.compact,
+              backgroundColor: loggedIn
+                  ? theme.colorScheme.primaryContainer
+                  : theme.colorScheme.surfaceContainerHighest,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButton<int>(
+                value: state.studioActiveIndex,
+                isExpanded: true,
+                items: [
+                  for (var i = 0; i < state.studioAccounts.length; i++)
+                    DropdownMenuItem<int>(
+                      value: i,
+                      child: Text(
+                        state.studioAccounts[i].name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (i) async {
+                  if (i == null) return;
+                  await state.selectStudioAccount(i);
+                  if (!mounted) return;
+                  setState(_syncStudioControllers);
+                },
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: '新建配置',
+              onPressed: _addStudioAccountDialog,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: '删除当前配置',
+              onPressed: _deleteStudioAccount,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _studioUrl,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            labelText: '服务器地址',
+            hintText: 'http://192.168.2.159:8648 或 https://ahov12.cc.cd',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.dns_outlined),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _studioUser,
+          decoration: const InputDecoration(
+            labelText: '用户名',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.person_outline),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _studioPass,
+          obscureText: _obscure,
+          decoration: InputDecoration(
+            labelText: '密码',
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.key_outlined),
+            suffixIcon: IconButton(
+              icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
+              onPressed: () => setState(() => _obscure = !_obscure),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.tonalIcon(
+                onPressed: _studioSave,
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('保存配置'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: loggedIn
+                  ? FilledButton.tonalIcon(
+                      onPressed: _studioLogout,
+                      icon: const Icon(Icons.logout),
+                      label: const Text('退出登录'),
+                    )
+                  : FilledButton.icon(
+                      onPressed: _studioBusy ? null : _studioLogin,
+                      icon: _studioBusy
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.login),
+                      label: const Text('登录'),
+                    ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -214,7 +506,9 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('连接', style: theme.textTheme.titleMedium),
+          _buildStudioSection(theme),
+          Text('旧版网关（8642 · 任务/定时/终端页使用）',
+              style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           Row(
             children: [
