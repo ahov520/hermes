@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'notifications.dart';
+import 'pages/chat_page.dart';
 import 'pages/jobs_page.dart';
+import 'pages/more_page.dart';
 import 'pages/runs_page.dart';
-import 'pages/settings_page.dart';
 import 'pages/terminal_page.dart';
 import 'state.dart';
-import 'studio/chat_page.dart';
 import 'theme.dart';
 
 void main() {
@@ -73,8 +73,12 @@ class _HermesAppState extends State<HermesApp> with WidgetsBindingObserver {
         debugShowCheckedModeBanner: false,
         navigatorKey: _navigatorKey,
         themeMode: state.themeMode,
-        theme: buildHermesTheme(state.seedColor, Brightness.light),
-        darkTheme: buildHermesTheme(state.seedColor, Brightness.dark),
+        theme: state.themeStyle == 'ink'
+            ? buildInkTheme(Brightness.light)
+            : buildHermesTheme(state.seedColor, Brightness.light),
+        darkTheme: state.themeStyle == 'ink'
+            ? buildInkTheme(Brightness.dark)
+            : buildHermesTheme(state.seedColor, Brightness.dark),
         home: HomeShell(state: state),
       ),
     );
@@ -97,11 +101,11 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final state = widget.state;
     final pages = <Widget>[
-      StudioChatPage(state: state),
+      ChatPage(state: state),
       TerminalPage(state: state),
       RunsPage(state: state),
       JobsPage(state: state),
-      SettingsPage(state: state),
+      MorePage(state: state),
     ];
     return Scaffold(
       body: IndexedStack(index: _index, children: pages),
@@ -113,7 +117,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.terminal), label: '终端'),
           NavigationDestination(icon: Icon(Icons.rocket_launch_outlined), label: '任务'),
           NavigationDestination(icon: Icon(Icons.schedule_outlined), label: '定时'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), label: '设置'),
+          NavigationDestination(icon: Icon(Icons.apps_outlined), label: '更多'),
         ],
       ),
     );

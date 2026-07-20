@@ -54,9 +54,14 @@ class HermesSession {
     this.preview,
     this.endReason,
     this.parentSessionId,
+    this.inputTokens = 0,
+    this.outputTokens = 0,
+    this.costUsd,
   });
 
   factory HermesSession.fromJson(Map<String, dynamic> json) {
+    final estimated = (json['estimated_cost_usd'] as num?)?.toDouble();
+    final actual = (json['actual_cost_usd'] as num?)?.toDouble();
     return HermesSession(
       id: (json['id'] ?? '').toString(),
       title: json['title']?.toString(),
@@ -68,6 +73,9 @@ class HermesSession {
       preview: json['preview']?.toString(),
       endReason: json['end_reason']?.toString(),
       parentSessionId: json['parent_session_id']?.toString(),
+      inputTokens: (json['input_tokens'] as num?)?.toInt() ?? 0,
+      outputTokens: (json['output_tokens'] as num?)?.toInt() ?? 0,
+      costUsd: actual ?? estimated,
     );
   }
 
@@ -81,6 +89,9 @@ class HermesSession {
   final String? preview;
   final String? endReason;
   final String? parentSessionId;
+  final int inputTokens;
+  final int outputTokens;
+  final double? costUsd;
 
   String get displayTitle {
     if (title != null && title!.isNotEmpty) return title!;

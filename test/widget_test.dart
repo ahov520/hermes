@@ -11,7 +11,7 @@ void main() {
     expect(find.text('终端'), findsAtLeastNWidgets(1));
     expect(find.text('任务'), findsAtLeastNWidgets(1));
     expect(find.text('定时'), findsAtLeastNWidgets(1));
-    expect(find.text('设置'), findsAtLeastNWidgets(1));
+    expect(find.text('更多'), findsAtLeastNWidgets(1));
     // 未配置 API Key 时提示先配置（Flutter 3.44 起 IndexedStack 非活动子树
     // 是 Offstage，需 skipOffstage: false 才能命中）
     expect(
